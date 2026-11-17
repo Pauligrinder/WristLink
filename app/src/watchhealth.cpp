@@ -159,6 +159,15 @@ void WatchHealth::forwardNotification(const QString &app, const QString &title,
     sendPhoneBattery();
 }
 
+void WatchHealth::withdrawNotification(uint id)
+{
+    QByteArray payload;
+    payload.append(char(1));
+    payload.append(char(0x08));
+    appendId(payload, id);
+    emit alertOutgoing(payload);
+}
+
 void WatchHealth::onBatteryLevel(int percent)
 {
     if (percent < 0 || percent > 100)

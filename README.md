@@ -43,6 +43,10 @@ and on their own about every half hour.
 Use **Mirrored notifications** in the pulley menu to choose which phone apps
 are forwarded to the watch. New apps are mirrored until you turn them off.
 
+Settings can turn the background service off, group watch notifications by
+app, skip forwarding while the phone is unlocked, or uninstall WristLink
+(configuration under `~/.config` is kept).
+
 ## Watch app
 
 ```sh

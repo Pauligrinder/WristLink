@@ -199,6 +199,9 @@ class NotificationFacade : public QObject
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(bool ready READ ready NOTIFY statusChanged)
     Q_PROPERTY(QVariantList apps READ apps NOTIFY appsChanged)
+    Q_PROPERTY(bool groupByApp READ groupByApp WRITE setGroupByApp NOTIFY preferencesChanged)
+    Q_PROPERTY(bool skipWhenUnlocked READ skipWhenUnlocked WRITE setSkipWhenUnlocked
+               NOTIFY preferencesChanged)
 
 public:
     explicit NotificationFacade(ControlClient *client, QObject *parent = 0);
@@ -206,13 +209,19 @@ public:
     QString status() const { return m_status; }
     bool ready() const { return m_ready; }
     QVariantList apps() const { return m_apps; }
+    bool groupByApp() const { return m_groupByApp; }
+    bool skipWhenUnlocked() const { return m_skipWhenUnlocked; }
 
     Q_INVOKABLE void setAppEnabled(const QString &app, bool enabled);
+    Q_INVOKABLE void setGroupByApp(bool enabled);
+    Q_INVOKABLE void setSkipWhenUnlocked(bool enabled);
     void apply(const QJsonObject &state);
+    void loadLocalPreferences();
 
 signals:
     void statusChanged();
     void appsChanged();
+    void preferencesChanged();
 
 private:
     ControlClient *m_client;
@@ -220,6 +229,8 @@ private:
     QString m_appsJson;
     QString m_status;
     bool m_ready;
+    bool m_groupByApp;
+    bool m_skipWhenUnlocked;
 };
 
 class ControlClient : public QObject
@@ -227,14 +238,19 @@ class ControlClient : public QObject
     Q_OBJECT
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
     Q_PROPERTY(QString status READ status NOTIFY connectedChanged)
+    Q_PROPERTY(bool serviceEnabled READ serviceEnabled WRITE setServiceEnabled
+               NOTIFY serviceEnabledChanged)
 
 public:
     explicit ControlClient(QObject *parent = 0);
 
     bool connected() const { return m_connected; }
     QString status() const { return m_status; }
+    bool serviceEnabled() const { return m_serviceEnabled; }
 
     Q_INVOKABLE void restartLink();
+    Q_INVOKABLE void setServiceEnabled(bool enabled);
+    Q_INVOKABLE void uninstall();
 
     BluezFacade *bluez() const { return m_bluez; }
     HealthFacade *health() const { return m_health; }
@@ -247,6 +263,7 @@ public:
 
 signals:
     void connectedChanged();
+    void serviceEnabledChanged();
 
 private slots:
     void tryConnect();
@@ -255,6 +272,9 @@ private slots:
 private:
     void applyState(const QString &json);
     void setConnected(bool connected, const QString &status);
+    void loadServiceEnabled();
+    void writeServiceEnabled(bool enabled);
+    void applyServiceUnit(bool enabled);
 
     BluezFacade *m_bluez;
     HealthFacade *m_health;
@@ -264,6 +284,7 @@ private:
     QTimer *m_retry;
     QDBusConnection m_connection;
     bool m_connected;
+    bool m_serviceEnabled;
     QString m_status;
 };
 

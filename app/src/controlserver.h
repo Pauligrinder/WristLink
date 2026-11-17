@@ -62,6 +62,9 @@ public slots:
     void RejectPairing();
     void Sync(const QString &path);
     void SetAppEnabled(const QString &app, bool enabled);
+    void SetGroupByApp(bool enabled);
+    void SetSkipWhenUnlocked(bool enabled);
+    void SetServiceEnabled(bool enabled);
     void RestartLink();
 
 signals:

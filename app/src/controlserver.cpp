@@ -2,6 +2,7 @@
 
 #include "socketpath.h"
 
+#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusServer>
@@ -9,6 +10,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
+#include <QSettings>
 #include <QTimer>
 
 WristlinkCore::WristlinkCore(QObject *parent)
@@ -26,6 +29,8 @@ WristlinkCore::WristlinkCore(QObject *parent)
     connect(&m_health, &WatchHealth::syncRequested, &m_gatt, &GattServer::readMetrics);
     connect(&m_notifications, &NotificationBridge::notificationPosted,
             &m_health, &WatchHealth::forwardNotification);
+    connect(&m_notifications, &NotificationBridge::notificationWithdrawn,
+            &m_health, &WatchHealth::withdrawNotification);
     connect(&m_gatt, &GattServer::metricsReceived, &m_health, &WatchHealth::onWatchMetrics);
     connect(&m_gatt, &GattServer::statusChanged, &m_health, [this]() {
         m_health.onGattStatus(m_gatt.status());
@@ -51,6 +56,7 @@ WristlinkCore::WristlinkCore(QObject *parent)
     connect(&m_health, SIGNAL(lastErrorChanged()), this, SIGNAL(changed()));
     connect(&m_notifications, SIGNAL(statusChanged()), this, SIGNAL(changed()));
     connect(&m_notifications, SIGNAL(appsChanged()), this, SIGNAL(changed()));
+    connect(&m_notifications, SIGNAL(preferencesChanged()), this, SIGNAL(changed()));
     connect(&m_gatt, SIGNAL(statusChanged()), this, SIGNAL(changed()));
     connect(&m_gatt, SIGNAL(detailChanged()), this, SIGNAL(changed()));
     connect(&m_gatt, SIGNAL(watchLinkedChanged()), this, SIGNAL(changed()));
@@ -105,6 +111,13 @@ QString WristlinkCore::stateJson() const
     notifications.insert(QStringLiteral("status"), m_notifications.status());
     notifications.insert(QStringLiteral("ready"), m_notifications.ready());
     notifications.insert(QStringLiteral("apps"), QJsonArray::fromVariantList(m_notifications.apps()));
+    notifications.insert(QStringLiteral("groupByApp"), m_notifications.groupByApp());
+    notifications.insert(QStringLiteral("skipWhenUnlocked"), m_notifications.skipWhenUnlocked());
+
+    QJsonObject service;
+    QSettings settings(wristlinkSettingsPath(), QSettings::IniFormat);
+    service.insert(QStringLiteral("enabled"),
+                   settings.value(QStringLiteral("service/enabled"), true).toBool());
 
     QJsonObject root;
     root.insert(QStringLiteral("bluez"), bluez);
@@ -112,6 +125,7 @@ QString WristlinkCore::stateJson() const
     root.insert(QStringLiteral("gatt"), gatt);
     root.insert(QStringLiteral("calls"), calls);
     root.insert(QStringLiteral("notifications"), notifications);
+    root.insert(QStringLiteral("service"), service);
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
 }
 
@@ -187,6 +201,37 @@ void ControlApi::Sync(const QString &path)
 void ControlApi::SetAppEnabled(const QString &app, bool enabled)
 {
     m_core->notifications()->setAppEnabled(app, enabled);
+}
+
+void ControlApi::SetGroupByApp(bool enabled)
+{
+    m_core->notifications()->setGroupByApp(enabled);
+}
+
+void ControlApi::SetSkipWhenUnlocked(bool enabled)
+{
+    m_core->notifications()->setSkipWhenUnlocked(enabled);
+}
+
+void ControlApi::SetServiceEnabled(bool enabled)
+{
+    QSettings settings(wristlinkSettingsPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("service/enabled"), enabled);
+    settings.sync();
+    if (enabled) {
+        QProcess::startDetached(QStringLiteral("systemctl"),
+                                QStringList() << QStringLiteral("--user")
+                                              << QStringLiteral("enable")
+                                              << QStringLiteral("--now")
+                                              << QStringLiteral("harbour-wristlink.service"));
+        return;
+    }
+    QProcess::startDetached(QStringLiteral("systemctl"),
+                            QStringList() << QStringLiteral("--user")
+                                          << QStringLiteral("disable")
+                                          << QStringLiteral("--now")
+                                          << QStringLiteral("harbour-wristlink.service"));
+    QTimer::singleShot(0, qApp, SLOT(quit()));
 }
 
 void ControlApi::RestartLink()
