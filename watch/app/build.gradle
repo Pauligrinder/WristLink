@@ -1,0 +1,40 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+}
+
+android {
+    namespace "org.wristlink.watch"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "org.wristlink.watch"
+        minSdk 30
+        targetSdk 34
+        versionCode 19
+        versionName "0.5.15"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.wear:wear:1.3.0"
+    implementation "com.google.android.gms:play-services-wearable:18.2.0"
+    implementation "androidx.health:health-services-client:1.0.0"
+    implementation "com.google.guava:guava:33.2.1-android"
+}

@@ -1,0 +1,14 @@
+{
+    "entries": [
+        {
+            "path": "system_settings/system/wristlink",
+            "title": "WristLink",
+            "type": "page",
+            "icon": "image://theme/icon-m-watch",
+            "order": 400,
+            "params": {
+                "source": "/usr/share/harbour-wristlink/qml/pages/HomePage.qml"
+            }
+        }
+    ]
+}

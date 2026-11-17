@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="172" height="172" viewBox="0 0 172 172">
+  <defs>
+    <linearGradient id="bezel" x1="28" y1="18" x2="148" y2="154" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7ee0ff"/>
+      <stop offset="1" stop-color="#4f8cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="172" height="172" rx="38" fill="#121722"/>
+  <rect x="71" y="10" width="30" height="22" rx="7" fill="url(#bezel)"/>
+  <rect x="71" y="140" width="30" height="22" rx="7" fill="url(#bezel)"/>
+  <circle cx="86" cy="86" r="58" fill="#1a2230" stroke="url(#bezel)" stroke-width="10"/>
+  <circle cx="86" cy="86" r="46" fill="#0e131c"/>
+  <g fill="#d7e7ff">
+    <rect x="83" y="46" width="6" height="12" rx="3"/>
+    <rect x="83" y="114" width="6" height="12" rx="3"/>
+    <rect x="46" y="83" width="12" height="6" rx="3"/>
+    <rect x="114" y="83" width="12" height="6" rx="3"/>
+  </g>
+  <path d="M86 62v24l18 12" fill="none" stroke="#f4f8ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="86" cy="86" r="6" fill="#7ee0ff"/>
+</svg>

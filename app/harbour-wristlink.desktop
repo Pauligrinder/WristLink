@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+X-Nemo-Application-Type=silica-qt5
+Icon=harbour-wristlink
+Exec=harbour-wristlink
+NoDisplay=true
+Name=WristLink
+Name[en]=WristLink
+Comment=Bluetooth watch companion for Sailfish OS
+Comment[en]=Bluetooth watch companion for Sailfish OS
+
+[X-Sailjail]
+Permissions=Bluetooth;Notifications
+OrganizationName=org.wristlink
+ApplicationName=harbour-wristlink
