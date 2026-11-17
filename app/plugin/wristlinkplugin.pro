@@ -17,6 +17,6 @@ HEADERS += \
     ../src/socketpath.h
 
 qmldir.files = qmldir
-target.path = /usr/lib64/qt5/qml/org/wristlink
+target.path = $$[QT_INSTALL_QML]/org/wristlink
 qmldir.path = $$target.path
 INSTALLS += target qmldir
