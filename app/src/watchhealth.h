@@ -51,6 +51,7 @@ public:
     Q_INVOKABLE void stop();
     Q_INVOKABLE void forwardNotification(const QString &app, const QString &title,
                                          const QString &body, uint id, uint color);
+    Q_INVOKABLE void withdrawNotification(uint id);
     Q_INVOKABLE void forwardCall(bool ringing, const QString &caller);
     Q_INVOKABLE void sendPhoneBattery();
 

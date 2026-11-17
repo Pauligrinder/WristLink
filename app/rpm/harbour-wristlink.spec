@@ -1,6 +1,6 @@
 Name:       harbour-wristlink
 Summary:    Bluetooth watch companion for Sailfish OS
-Version:    0.6.9
+Version:    0.7.0
 Release:    1
 License:    BSD-3-Clause
 Source0:    %{name}-%{version}.tar.bz2
@@ -8,6 +8,7 @@ Requires:   sailfishsilica-qt5 >= 0.10.9
 Requires:   qt5-qtcore
 Requires:   qt5-qtdeclarative
 Requires:   qt5-qtdbus
+Requires:   PackageKit
 BuildRequires:  pkgconfig(sailfishapp) >= 1.0.2
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Qml)
@@ -74,6 +75,9 @@ fi
 %{_libdir}/qt5/qml/org/wristlink
 
 %changelog
+* Tue Nov 17 2026 Pauli Kettunen <pauligrinder@gmail.com> - 0.7.0-1
+- Add service enable, uninstall, grouped notifications, and skip-while-unlocked settings.
+
 * Tue Nov 17 2026 Pauli Kettunen <pauligrinder@gmail.com> - 0.6.9-1
 - Keep the paired Bluetooth connection and send notifications, calls, and health only when needed.
 

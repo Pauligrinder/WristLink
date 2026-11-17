@@ -6,6 +6,8 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QProcess>
+#include <QSettings>
 #include <QTimer>
 
 static bool setString(QString *target, const QString &value)
@@ -192,12 +194,47 @@ NotificationFacade::NotificationFacade(ControlClient *client, QObject *parent)
     , m_client(client)
     , m_status(QStringLiteral("Waiting for the WristLink service…"))
     , m_ready(false)
+    , m_groupByApp(false)
+    , m_skipWhenUnlocked(false)
 {
+    loadLocalPreferences();
+}
+
+void NotificationFacade::loadLocalPreferences()
+{
+    QSettings settings(wristlinkSettingsPath(), QSettings::IniFormat);
+    m_groupByApp = settings.value(QStringLiteral("notifications/groupByApp"), false).toBool();
+    m_skipWhenUnlocked =
+            settings.value(QStringLiteral("notifications/skipWhenUnlocked"), false).toBool();
 }
 
 void NotificationFacade::setAppEnabled(const QString &app, bool enabled)
 {
     m_client->call(QStringLiteral("SetAppEnabled"), app, QVariant(enabled));
+}
+
+void NotificationFacade::setGroupByApp(bool enabled)
+{
+    if (m_groupByApp == enabled)
+        return;
+    m_groupByApp = enabled;
+    QSettings settings(wristlinkSettingsPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("notifications/groupByApp"), enabled);
+    settings.sync();
+    m_client->call(QStringLiteral("SetGroupByApp"), QVariant(enabled));
+    emit preferencesChanged();
+}
+
+void NotificationFacade::setSkipWhenUnlocked(bool enabled)
+{
+    if (m_skipWhenUnlocked == enabled)
+        return;
+    m_skipWhenUnlocked = enabled;
+    QSettings settings(wristlinkSettingsPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("notifications/skipWhenUnlocked"), enabled);
+    settings.sync();
+    m_client->call(QStringLiteral("SetSkipWhenUnlocked"), QVariant(enabled));
+    emit preferencesChanged();
 }
 
 void NotificationFacade::apply(const QJsonObject &state)
@@ -217,6 +254,11 @@ void NotificationFacade::apply(const QJsonObject &state)
         m_status = status;
         emit statusChanged();
     }
+    bool prefs = false;
+    prefs |= setBool(&m_groupByApp, state.value(QStringLiteral("groupByApp")).toBool());
+    prefs |= setBool(&m_skipWhenUnlocked, state.value(QStringLiteral("skipWhenUnlocked")).toBool());
+    if (prefs)
+        emit preferencesChanged();
 }
 
 ControlClient::ControlClient(QObject *parent)
@@ -229,19 +271,86 @@ ControlClient::ControlClient(QObject *parent)
     , m_retry(new QTimer(this))
     , m_connection(QStringLiteral("wristlink-none"))
     , m_connected(false)
+    , m_serviceEnabled(true)
     , m_status(QStringLiteral("Starting the WristLink service…"))
 {
     m_gatt->setParent(this);
     m_calls->setParent(this);
+    loadServiceEnabled();
     m_retry->setInterval(2000);
     connect(m_retry, SIGNAL(timeout()), this, SLOT(tryConnect()));
-    m_retry->start();
+    if (m_serviceEnabled)
+        m_retry->start();
     QTimer::singleShot(0, this, SLOT(tryConnect()));
+}
+
+void ControlClient::loadServiceEnabled()
+{
+    QSettings settings(wristlinkSettingsPath(), QSettings::IniFormat);
+    m_serviceEnabled = settings.value(QStringLiteral("service/enabled"), true).toBool();
+}
+
+void ControlClient::writeServiceEnabled(bool enabled)
+{
+    QSettings settings(wristlinkSettingsPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("service/enabled"), enabled);
+    settings.sync();
+}
+
+void ControlClient::applyServiceUnit(bool enabled)
+{
+    if (enabled) {
+        QProcess::startDetached(QStringLiteral("systemctl"),
+                                QStringList() << QStringLiteral("--user")
+                                              << QStringLiteral("enable")
+                                              << QStringLiteral("--now")
+                                              << QStringLiteral("harbour-wristlink.service"));
+        return;
+    }
+    QProcess::startDetached(QStringLiteral("systemctl"),
+                            QStringList() << QStringLiteral("--user")
+                                          << QStringLiteral("disable")
+                                          << QStringLiteral("--now")
+                                          << QStringLiteral("harbour-wristlink.service"));
 }
 
 void ControlClient::restartLink()
 {
     call(QStringLiteral("RestartLink"));
+}
+
+void ControlClient::setServiceEnabled(bool enabled)
+{
+    if (m_serviceEnabled == enabled)
+        return;
+    m_serviceEnabled = enabled;
+    writeServiceEnabled(enabled);
+    if (m_connected)
+        call(QStringLiteral("SetServiceEnabled"), QVariant(enabled));
+    else
+        applyServiceUnit(enabled);
+    if (enabled) {
+        if (!m_retry->isActive())
+            m_retry->start();
+        QTimer::singleShot(0, this, SLOT(tryConnect()));
+    } else {
+        m_retry->stop();
+        setConnected(false, QStringLiteral("WristLink service is disabled"));
+    }
+    emit serviceEnabledChanged();
+}
+
+void ControlClient::uninstall()
+{
+    writeServiceEnabled(false);
+    m_serviceEnabled = false;
+    emit serviceEnabledChanged();
+    m_retry->stop();
+    applyServiceUnit(false);
+    QProcess::startDetached(QStringLiteral("pkcon"),
+                            QStringList() << QStringLiteral("-y")
+                                          << QStringLiteral("remove")
+                                          << QStringLiteral("harbour-wristlink"));
 }
 
 void ControlClient::call(const QString &method, const QVariant &argument)
@@ -270,6 +379,10 @@ void ControlClient::call(const QString &method, const QVariant &first, const QVa
 
 void ControlClient::tryConnect()
 {
+    if (!m_serviceEnabled) {
+        setConnected(false, QStringLiteral("WristLink service is disabled"));
+        return;
+    }
     if (m_connection.isConnected())
         return;
     const QString path = wristlinkSocketPath();
@@ -319,6 +432,12 @@ void ControlClient::applyState(const QString &json)
     m_gatt->apply(root.value(QStringLiteral("gatt")).toObject());
     m_calls->apply(root.value(QStringLiteral("calls")).toObject());
     m_notifications->apply(root.value(QStringLiteral("notifications")).toObject());
+    const QJsonObject service = root.value(QStringLiteral("service")).toObject();
+    if (service.contains(QStringLiteral("enabled"))) {
+        const bool enabled = service.value(QStringLiteral("enabled")).toBool();
+        if (setBool(&m_serviceEnabled, enabled))
+            emit serviceEnabledChanged();
+    }
 }
 
 void ControlClient::setConnected(bool connected, const QString &status)

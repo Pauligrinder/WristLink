@@ -1,5 +1,7 @@
 #include "notificationbridge.h"
 
+#include "socketpath.h"
+
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -472,14 +474,14 @@ NotificationBridge::NotificationBridge(QObject *parent)
     , m_callRinging(false)
     , m_callSeenInList(false)
     , m_sawCallInPoll(false)
+    , m_groupByApp(false)
+    , m_skipWhenUnlocked(false)
+    , m_phoneUnlocked(false)
     , m_lastCallMs(0)
     , m_monitor(new NotificationMonitorThread(this))
     , m_settings(0)
 {
-    const QString configDir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    QDir().mkpath(configDir);
-    m_settings = new QSettings(configDir + QStringLiteral("/settings.ini"),
-                               QSettings::IniFormat, this);
+    m_settings = new QSettings(wristlinkSettingsPath(), QSettings::IniFormat, this);
     loadSettings();
     connect(m_monitor, SIGNAL(notify(QString,uint,QString,QString,QString,QStringList,QVariantMap,int)),
             this, SLOT(onNotify(QString,uint,QString,QString,QString,QStringList,QVariantMap,int)),
@@ -503,6 +505,13 @@ NotificationBridge::NotificationBridge(QObject *parent)
         logLine(QStringLiteral("Live notification monitor unavailable: %1").arg(reason));
         setStatus(QStringLiteral("Watching the notification list"), true);
     });
+    QDBusConnection::systemBus().connect(
+                QStringLiteral("com.nokia.mce"),
+                QStringLiteral("/com/nokia/mce/signal"),
+                QStringLiteral("com.nokia.mce.signal"),
+                QStringLiteral("tklock_mode_ind"),
+                this, SLOT(onTklockMode(QString)));
+    refreshLockState();
     m_monitor->start();
     setStatus(QStringLiteral("Starting notification listener…"), false);
 }
@@ -520,6 +529,9 @@ void NotificationBridge::loadSettings()
     const QStringList known =
             m_settings->value(QStringLiteral("notifications/knownApps")).toStringList();
     m_knownApps = known;
+    m_groupByApp = m_settings->value(QStringLiteral("notifications/groupByApp"), false).toBool();
+    m_skipWhenUnlocked =
+            m_settings->value(QStringLiteral("notifications/skipWhenUnlocked"), false).toBool();
 }
 
 void NotificationBridge::saveDisabledApps()
@@ -528,6 +540,112 @@ void NotificationBridge::saveDisabledApps()
                          QStringList(m_disabledApps.toList()));
     m_settings->setValue(QStringLiteral("notifications/knownApps"), m_knownApps);
     m_settings->sync();
+}
+
+void NotificationBridge::savePreferences()
+{
+    m_settings->setValue(QStringLiteral("notifications/groupByApp"), m_groupByApp);
+    m_settings->setValue(QStringLiteral("notifications/skipWhenUnlocked"), m_skipWhenUnlocked);
+    m_settings->sync();
+}
+
+void NotificationBridge::setGroupByApp(bool enabled)
+{
+    if (m_groupByApp == enabled)
+        return;
+    m_groupByApp = enabled;
+    savePreferences();
+    emit preferencesChanged();
+}
+
+void NotificationBridge::setSkipWhenUnlocked(bool enabled)
+{
+    if (m_skipWhenUnlocked == enabled)
+        return;
+    m_skipWhenUnlocked = enabled;
+    savePreferences();
+    emit preferencesChanged();
+}
+
+void NotificationBridge::refreshLockState()
+{
+    QDBusMessage call = QDBusMessage::createMethodCall(
+                QStringLiteral("com.nokia.mce"),
+                QStringLiteral("/com/nokia/mce/request"),
+                QStringLiteral("com.nokia.mce.request"),
+                QStringLiteral("get_tklock_mode"));
+    const QDBusMessage reply = QDBusConnection::systemBus().call(call, QDBus::Block, 1000);
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        onTklockMode(reply.arguments().at(0).toString());
+}
+
+void NotificationBridge::onTklockMode(const QString &mode)
+{
+    m_phoneUnlocked = mode.contains(QLatin1String("unlocked"), Qt::CaseInsensitive);
+}
+
+bool NotificationBridge::phoneIsUnlocked() const
+{
+    return m_phoneUnlocked;
+}
+
+uint NotificationBridge::stableAppId(const QString &app) const
+{
+    uint id = qHash(app);
+    if (id == 0)
+        id = 1;
+    return id;
+}
+
+void NotificationBridge::publishAlert(const QString &app, const ActiveAlert &alert, int others)
+{
+    QString body = alert.body;
+    if (others > 0) {
+        const QString suffix = others == 1
+                ? QStringLiteral("+1 other notification")
+                : QStringLiteral("+%1 other notifications").arg(others);
+        if (body.isEmpty())
+            body = suffix;
+        else
+            body = body + QLatin1Char('\n') + suffix;
+    }
+    logLine(QStringLiteral("Forwarding %1: %2").arg(app, alert.title));
+    emit notificationPosted(app, alert.title, body, alert.id, alert.color);
+    setStatus(QStringLiteral("Forwarding phone notifications to the watch"), true);
+}
+
+void NotificationBridge::refreshGroupedAlert(const QString &app)
+{
+    const QList<ActiveAlert> alerts = m_activeByApp.value(app);
+    if (alerts.isEmpty()) {
+        emit notificationWithdrawn(stableAppId(app));
+        return;
+    }
+    ActiveAlert latest = alerts.last();
+    latest.id = stableAppId(app);
+    publishAlert(app, latest, alerts.size() - 1);
+}
+
+void NotificationBridge::removeActiveAlert(uint id, bool publish)
+{
+    const QString app = m_activeAppById.take(id);
+    if (app.isEmpty())
+        return;
+    QList<ActiveAlert> &alerts = m_activeByApp[app];
+    for (int i = 0; i < alerts.size(); ++i) {
+        if (alerts.at(i).id != id)
+            continue;
+        alerts.removeAt(i);
+        break;
+    }
+    if (alerts.isEmpty())
+        m_activeByApp.remove(app);
+    if (!publish)
+        return;
+    if (m_groupByApp)
+        refreshGroupedAlert(app);
+    else
+        emit notificationWithdrawn(id);
 }
 
 QVariantList NotificationBridge::apps() const
@@ -683,11 +801,14 @@ void NotificationBridge::stopIncomingCall()
 
 void NotificationBridge::onNotificationClosed(uint id)
 {
-    if (id == 0 || !m_ringingIds.contains(id))
+    if (id == 0)
         return;
-    m_ringingIds.remove(id);
-    if (m_ringingIds.isEmpty())
-        stopIncomingCall();
+    if (m_ringingIds.contains(id)) {
+        m_ringingIds.remove(id);
+        if (m_ringingIds.isEmpty())
+            stopIncomingCall();
+    }
+    removeActiveAlert(id, true);
 }
 
 void NotificationBridge::considerNotification(uint id, const QString &app,
@@ -738,6 +859,8 @@ void NotificationBridge::considerNotification(uint id, const QString &app,
     rememberApp(appLabel);
     if (!isAppEnabled(appLabel))
         return;
+    if (m_skipWhenUnlocked && phoneIsUnlocked())
+        return;
 
     uint key = id;
     const QString fingerprint = appLabel + QLatin1Char('\n') + resolvedTitle
@@ -756,9 +879,22 @@ void NotificationBridge::considerNotification(uint id, const QString &app,
         return;
 
     const uint color = notificationColor(hints);
-    logLine(QStringLiteral("Forwarding %1: %2").arg(appLabel, resolvedTitle));
-    emit notificationPosted(appLabel, resolvedTitle, resolvedBody, key, color);
-    setStatus(QStringLiteral("Forwarding phone notifications to the watch"), true);
+    ActiveAlert alert;
+    alert.id = key;
+    alert.title = resolvedTitle;
+    alert.body = resolvedBody;
+    alert.color = color;
+
+    if (m_activeAppById.contains(key))
+        removeActiveAlert(key, false);
+    m_activeAppById.insert(key, appLabel);
+    m_activeByApp[appLabel].append(alert);
+
+    if (m_groupByApp) {
+        refreshGroupedAlert(appLabel);
+        return;
+    }
+    publishAlert(appLabel, alert, 0);
 }
 
 void NotificationBridge::onListed(const QString &appName, uint id, const QString &summary,

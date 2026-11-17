@@ -643,6 +643,12 @@ class HealthPublisherService : Service(), SensorEventListener {
             startCallRing(title, body)
             return
         }
+        if (alertFlags and 0x08 != 0) {
+            val notifyId = alertNotifyId(id)
+            manager.cancel(notifyId)
+            forgetAlert(notifyId)
+            return
+        }
         if (alertFlags and 0x01 != 0) {
             stopCallRing()
             val notifyId = alertNotifyId(id)
@@ -718,9 +724,12 @@ class HealthPublisherService : Service(), SensorEventListener {
 
     private fun postAppSummary(manager: NotificationManager, app: String) {
         val count = alertsByApp[app]?.size ?: 0
-        if (count == 0) return
+        if (count <= 1) {
+            summaryIds[app]?.let { manager.cancel(it) }
+            return
+        }
         val summaryId = summaryIds.getOrPut(app) { nextSummaryId++ }
-        val text = if (count == 1) "1 notification" else "$count notifications"
+        val text = "$count notifications"
         val accent = colorByApp[app] ?: AppAppearance.color(app)
         val summary = NotificationCompat.Builder(this, ALERT_CHANNEL)
             .setContentTitle(app)

@@ -276,6 +276,32 @@ Page {
                 font.pixelSize: Theme.fontSizeExtraSmall
             }
 
+            SectionHeader { text: qsTr("Settings") }
+
+            TextSwitch {
+                width: parent.width
+                text: qsTr("Service enabled")
+                description: qsTr("When off, WristLink does not run in the background")
+                checked: wristlink.serviceEnabled
+                onClicked: wristlink.serviceEnabled = checked
+            }
+
+            TextSwitch {
+                width: parent.width
+                text: qsTr("Group notifications by app")
+                description: qsTr("Show one notification per app, with the latest text and how many others are waiting")
+                checked: notificationBridge.groupByApp
+                onClicked: notificationBridge.groupByApp = checked
+            }
+
+            TextSwitch {
+                width: parent.width
+                text: qsTr("Only while locked")
+                description: qsTr("Do not send notifications to the watch while the phone is unlocked")
+                checked: notificationBridge.skipWhenUnlocked
+                onClicked: notificationBridge.skipWhenUnlocked = checked
+            }
+
             SectionHeader { text: qsTr("Watch") }
 
             BackgroundItem {
@@ -294,9 +320,56 @@ Page {
                     color: parent.enabled ? Theme.primaryColor : Theme.secondaryColor
                 }
             }
+
+            BackgroundItem {
+                width: parent.width
+                onClicked: pageStack.push(uninstallDialog)
+
+                Label {
+                    x: Theme.horizontalPageMargin
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Uninstall WristLink")
+                    color: Theme.primaryColor
+                }
+            }
         }
 
         VerticalScrollDecorator { }
+    }
+
+    Component {
+        id: uninstallDialog
+
+        Dialog {
+            canAccept: true
+
+            SilicaFlickable {
+                anchors.fill: parent
+                contentHeight: uninstallContent.height
+
+                Column {
+                    id: uninstallContent
+                    width: parent.width
+                    spacing: Theme.paddingLarge
+
+                    DialogHeader {
+                        acceptText: qsTr("Uninstall")
+                        cancelText: qsTr("Cancel")
+                    }
+
+                    Label {
+                        width: parent.width - 2 * Theme.horizontalPageMargin
+                        x: Theme.horizontalPageMargin
+                        text: qsTr("Are you sure you want to uninstall the service? Your configuration will remain in storage")
+                        color: Theme.highlightColor
+                        font.pixelSize: Theme.fontSizeLarge
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+
+            onAccepted: wristlink.uninstall()
+        }
     }
 
     Component {
