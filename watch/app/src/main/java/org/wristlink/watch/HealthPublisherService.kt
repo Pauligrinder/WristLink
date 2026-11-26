@@ -320,7 +320,7 @@ class HealthPublisherService : Service(), SensorEventListener {
                 if (!closed && central == null) {
                     updateNotification("Waiting to advertise…")
                     handler.removeCallbacks(advertiseRetry)
-                    handler.postDelayed(advertiseRetry, 60_000)
+                    handler.postDelayed(advertiseRetry, 15_000)
                 }
             }
         }
@@ -411,9 +411,11 @@ class HealthPublisherService : Service(), SensorEventListener {
             return
         }
         advertiser = ble
+        // Balanced + higher TX so Sailfish/BlueZ can see the LE advert after
+        // dropping a classic ACL (Pixel Watch stays on BR/EDR otherwise).
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
             .setConnectable(true)
             .setTimeout(0)
             .build()
@@ -421,8 +423,11 @@ class HealthPublisherService : Service(), SensorEventListener {
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
             .setIncludeDeviceName(false)
             .build()
+        val scanResponse = AdvertiseData.Builder()
+            .setIncludeDeviceName(true)
+            .build()
         try {
-            ble.startAdvertising(settings, data, advertiseCallback)
+            ble.startAdvertising(settings, data, scanResponse, advertiseCallback)
             advertising = true
             updateNotification("Waiting for the phone")
         } catch (error: SecurityException) {
@@ -433,6 +438,20 @@ class HealthPublisherService : Service(), SensorEventListener {
             advertising = false
             Log.w(TAG, "advertise failed", error)
             updateNotification("Turn Bluetooth on")
+        } catch (error: IllegalArgumentException) {
+            // Some Wear builds reject the scan response; advertise without it.
+            Log.w(TAG, "advertise with name failed, retrying", error)
+            try {
+                ble.startAdvertising(settings, data, advertiseCallback)
+                advertising = true
+                updateNotification("Waiting for the phone")
+            } catch (retry: Exception) {
+                advertising = false
+                Log.w(TAG, "advertise failed", retry)
+                updateNotification("Waiting to advertise…")
+                handler.removeCallbacks(advertiseRetry)
+                handler.postDelayed(advertiseRetry, 15_000)
+            }
         }
     }
 

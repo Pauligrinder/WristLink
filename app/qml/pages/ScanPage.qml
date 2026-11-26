@@ -29,7 +29,7 @@ Page {
                 width: parent.width - 2 * Theme.horizontalPageMargin
                 x: Theme.horizontalPageMargin
                 height: implicitHeight + Theme.paddingLarge
-                text: qsTr("On the watch, open Settings › Connections › Bluetooth and keep the pairing screen visible. If Sailfish asks you to confirm a code, accept it there. After pairing, connect the watch here and leave WristLink open on it.")
+                text: qsTr("On the watch, open Settings › Connections › Bluetooth and keep the pairing screen visible. If Sailfish asks you to confirm a code, accept it there. After pairing, leave WristLink open on the watch — the phone switches to Bluetooth LE to reach the watch app (classic “Connected” alone is not enough).")
                 color: Theme.secondaryColor
                 wrapMode: Text.Wrap
             }

@@ -27,6 +27,8 @@ const char *GattServer::kAlertUuid = "f1a5e001-7c4b-4d2a-9e11-57a1f15c0003";
 static const qint64 kSyncIntervalMs = 30 * 60 * 1000;
 static const qint64 kIdleConnectGapMs = 10 * 60 * 1000;
 static const qint64 kEventConnectGapMs = 20 * 1000;
+static const qint64 kLeReconnectGapMs = 20 * 1000;
+static const int kLeReconnectMax = 6;
 static const int kWriteQueueMax = 8;
 
 static QString logFilePath()
@@ -60,6 +62,7 @@ GattServer::GattServer(QObject *parent)
     , m_syncStartedMs(0)
     , m_lastConnectAttemptMs(0)
     , m_lastBounceMs(0)
+    , m_lastLeReconnectMs(0)
     , m_quietUntilMs(0)
     , m_alive(true)
     , m_ready(false)
@@ -73,6 +76,7 @@ GattServer::GattServer(QObject *parent)
     , m_bouncedForError(false)
     , m_opEpoch(0)
     , m_failures(0)
+    , m_leReconnectAttempts(0)
 {
     qDBusRegisterMetaType<InterfaceMap>();
     qDBusRegisterMetaType<ManagedObjectMap>();
@@ -100,6 +104,8 @@ void GattServer::restart()
     m_quietUntilMs = 0;
     m_failures = 0;
     m_lastBounceMs = 0;
+    m_lastLeReconnectMs = 0;
+    m_leReconnectAttempts = 0;
     m_bouncedForError = false;
     dropSession();
     note(QStringLiteral("Restarting the Bluetooth connection"));
@@ -107,7 +113,7 @@ void GattServer::restart()
         setStatus(QStringLiteral("Pair a watch to connect"), false);
         return;
     }
-    bounce();
+    requestLeReconnect();
 }
 
 void GattServer::holdLink(bool hold)
@@ -130,6 +136,10 @@ void GattServer::noteWatch(const QString &pairedPath, bool connected)
 {
     if (!m_alive)
         return;
+    if (m_pairedPath != pairedPath) {
+        m_leReconnectAttempts = 0;
+        m_lastLeReconnectMs = 0;
+    }
     m_pairedPath = pairedPath;
     if (pairedPath.isEmpty()) {
         m_linkUp = false;
@@ -172,8 +182,10 @@ void GattServer::noteWatch(const QString &pairedPath, bool connected)
     if (m_alertPath.isEmpty()) {
         if (QDateTime::currentMSecsSinceEpoch() >= m_quietUntilMs)
             discover();
-    } else if (!m_opInFlight) {
-        pump();
+    } else {
+        m_leReconnectAttempts = 0;
+        if (!m_opInFlight)
+            pump();
     }
 }
 
@@ -260,6 +272,7 @@ void GattServer::discover()
         m_alertPath = alertPath;
         m_bouncedForError = false;
         m_failures = 0;
+        m_leReconnectAttempts = 0;
         note(QStringLiteral("Using the paired Bluetooth connection"));
         markLinked();
         return;
@@ -267,9 +280,23 @@ void GattServer::discover()
 
     if (!resolved) {
         setStatus(QStringLiteral("Watch connected"), true);
+        // Dual-mode watches often finish classic SDP with no GATT. Give the
+        // browse a few seconds, then switch the ACL to LE if still empty.
+        if (!m_bouncing && m_leReconnectAttempts < kLeReconnectMax) {
+            QTimer::singleShot(8000, this, [this]() {
+                if (!m_alive || m_userHeld || !m_linkUp || !m_alertPath.isEmpty())
+                    return;
+                requestLeReconnect();
+            });
+        }
         return;
     }
-    setStatus(QStringLiteral("Watch connected — open WristLink on the watch"), true);
+
+    // Connected over classic (or stale GATT cache) without WristLink — Pixel
+    // Watch and similar dual-mode devices need an LE reconnect.
+    note(QStringLiteral("Paired link has no WristLink GATT; trying Bluetooth LE"));
+    setStatus(QStringLiteral("Switching to Bluetooth LE…"), true);
+    requestLeReconnect();
 }
 
 void GattServer::markLinked()
@@ -465,16 +492,31 @@ void GattServer::requestConnect(bool now)
 
 void GattServer::bounce()
 {
+    requestLeReconnect();
+}
+
+void GattServer::requestLeReconnect()
+{
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     if (m_bouncing || m_userHeld || m_pairedPath.isEmpty())
         return;
-    if (m_lastBounceMs != 0 && now - m_lastBounceMs < kIdleConnectGapMs)
+    if (m_leReconnectAttempts >= kLeReconnectMax) {
+        setStatus(QStringLiteral("Watch connected — open WristLink on the watch"), true);
         return;
+    }
+    if (m_lastLeReconnectMs != 0 && now - m_lastLeReconnectMs < kLeReconnectGapMs)
+        return;
+    m_lastLeReconnectMs = now;
     m_lastBounceMs = now;
+    ++m_leReconnectAttempts;
     m_bouncing = true;
-    note(QStringLiteral("Reconnecting the paired watch"));
+    m_linkUp = false;
+    dropSession();
+    note(QStringLiteral("Reconnecting over Bluetooth LE (%1/%2)")
+         .arg(m_leReconnectAttempts).arg(kLeReconnectMax));
+    setStatus(QStringLiteral("Switching to Bluetooth LE…"), true);
     emit reconnectRequested(m_pairedPath);
-    QTimer::singleShot(20000, this, [this]() {
+    QTimer::singleShot(25000, this, [this]() {
         m_bouncing = false;
     });
 }

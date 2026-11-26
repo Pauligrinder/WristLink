@@ -16,7 +16,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val label = TextView(this)
-        label.text = "WristLink shows notifications and rings when the phone rings. Steps sync when that happens, or about every half hour. Grant sensors and Bluetooth, then leave this app running. The phone connects — this watch does not search for it."
+        label.text = "WristLink shows notifications and rings when the phone rings. Steps sync when that happens, or about every half hour. Grant sensors and Bluetooth, then leave this app running so it can advertise. The phone switches to Bluetooth LE to reach this app — classic pairing alone is not enough."
         label.textSize = 16f
         val restart = Button(this)
         restart.text = "Restart WristLink"

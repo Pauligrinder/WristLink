@@ -66,6 +66,7 @@ private:
     void dropSession();
     void requestConnect(bool now);
     void bounce();
+    void requestLeReconnect();
     void enqueue(const QByteArray &payload);
     void takeMetrics(const QByteArray &value);
     void note(const QString &line);
@@ -86,6 +87,7 @@ private:
     qint64 m_syncStartedMs;
     qint64 m_lastConnectAttemptMs;
     qint64 m_lastBounceMs;
+    qint64 m_lastLeReconnectMs;
     qint64 m_quietUntilMs;
     bool m_alive;
     bool m_ready;
@@ -99,6 +101,7 @@ private:
     bool m_bouncedForError;
     int m_opEpoch;
     int m_failures;
+    int m_leReconnectAttempts;
 };
 
 #endif

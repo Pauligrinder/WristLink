@@ -88,7 +88,7 @@ Page {
                 x: Theme.horizontalPageMargin
                 horizontalAlignment: Text.AlignHCenter
                 text: gattServer.watchLinked
-                      ? qsTr("Connected")
+                      ? qsTr("Linked to WristLink on the watch")
                       : gattServer.status
                 color: gattServer.watchLinked ? Theme.highlightColor : Theme.secondaryColor
                 wrapMode: Text.Wrap

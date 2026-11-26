@@ -75,6 +75,8 @@ public:
     Q_INVOKABLE void connectDevice(const QString &path);
     void ensureConnected(const QString &path);
     void reconnectDevice(const QString &path);
+    // Drop classic ACL and reconnect preferring LE so WristLink GATT is visible.
+    void reconnectForGatt(const QString &path);
     Q_INVOKABLE void disconnectDevice(const QString &path);
     Q_INVOKABLE void removeDevice(const QString &path);
     Q_INVOKABLE void acceptPairing();
@@ -104,6 +106,9 @@ private:
     void setAgentStatus(const QString &message, bool ready);
     void registerAgent();
     void setDeviceTrusted(const QString &path);
+    void setPreferredBearer(const QString &path, const QString &bearer);
+    void startLeDiscovery();
+    void clearDiscoveryFilter();
     QString deviceNameForPath(const QString &path) const;
     void callDeviceMethod(const QString &path, const QString &method,
                           const QString &workingMessage, const QString &successMessage);

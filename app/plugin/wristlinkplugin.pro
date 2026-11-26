@@ -3,7 +3,7 @@ TEMPLATE = lib
 CONFIG += plugin c++11
 QT = core dbus qml
 
-VERSION = 0.7.1
+VERSION = 0.7.2
 DEFINES += APP_VERSION=\\\"$$VERSION\\\"
 
 INCLUDEPATH += ../src

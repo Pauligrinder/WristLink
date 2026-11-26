@@ -16,8 +16,10 @@ connection is down, so the phone can reach it again.
 WristLink has been tested on **Galaxy Watch 7**. Detection also recognizes other
 Wear OS watches (Pixel Watch, OnePlus Watch, TicWatch, Fossil, and similar) via
 Bluetooth name, BlueZ watch icon/appearance/class, or the WristLink GATT
-service. Those models should work if they can sideload the APK and expose Health
-Services / step sensors, but they have not been tested yet.
+service. Dual-mode watches that stay on classic Bluetooth are switched to LE so
+the WristLink GATT service can be reached. Those models should work if they can
+sideload the APK and expose Health Services / step sensors, but they have not
+been tested yet.
 
 ## Jolla app
 

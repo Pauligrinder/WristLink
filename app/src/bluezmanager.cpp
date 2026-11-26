@@ -494,8 +494,52 @@ void BluezManager::pairDevice(const QString &path)
                      QStringLiteral("Watch paired"));
 }
 
+void BluezManager::setPreferredBearer(const QString &path, const QString &bearer)
+{
+    if (path.isEmpty() || bearer.isEmpty())
+        return;
+    QDBusInterface props(QStringLiteral("org.bluez"), path,
+                         QStringLiteral("org.freedesktop.DBus.Properties"),
+                         QDBusConnection::systemBus());
+    // PreferredBearer is optional (BlueZ ≥ 5.80). Ignore UnknownProperty.
+    props.call(QStringLiteral("Set"),
+               QStringLiteral("org.bluez.Device1"),
+               QStringLiteral("PreferredBearer"),
+               QVariant::fromValue(QDBusVariant(bearer)));
+}
+
+void BluezManager::startLeDiscovery()
+{
+    if (m_adapterPath.isEmpty())
+        return;
+    QDBusInterface adapter(QStringLiteral("org.bluez"), m_adapterPath,
+                           QStringLiteral("org.bluez.Adapter1"),
+                           QDBusConnection::systemBus());
+    QVariantMap filter;
+    filter.insert(QStringLiteral("Transport"), QStringLiteral("le"));
+    filter.insert(QStringLiteral("UUIDs"),
+                  QStringList() << QLatin1String(kWristLinkServiceUuid));
+    adapter.call(QStringLiteral("SetDiscoveryFilter"), filter);
+    const QDBusMessage reply = adapter.call(QStringLiteral("StartDiscovery"));
+    if (reply.type() != QDBusMessage::ErrorMessage)
+        setDiscovering(true);
+}
+
+void BluezManager::clearDiscoveryFilter()
+{
+    if (m_adapterPath.isEmpty())
+        return;
+    QDBusInterface adapter(QStringLiteral("org.bluez"), m_adapterPath,
+                           QStringLiteral("org.bluez.Adapter1"),
+                           QDBusConnection::systemBus());
+    adapter.call(QStringLiteral("SetDiscoveryFilter"), QVariantMap());
+}
+
 void BluezManager::connectDevice(const QString &path)
 {
+    // WristLink GATT lives on LE. Dual-mode watches (Pixel, Galaxy, …) often
+    // stay on classic ACL; prefer LE so Connect() brings up ATT.
+    setPreferredBearer(path, QStringLiteral("le"));
     callDeviceMethod(path, QStringLiteral("Connect"),
                      QStringLiteral("Connecting…"), QStringLiteral("Watch connected"));
 }
@@ -506,6 +550,7 @@ void BluezManager::ensureConnected(const QString &path)
         return;
     if (path == pairedWatchPath() && watchIsConnected())
         return;
+    setPreferredBearer(path, QStringLiteral("le"));
     callDeviceMethod(path, QStringLiteral("Connect"),
                      QStringLiteral("Connecting to the watch…"),
                      QStringLiteral("Watch connected"));
@@ -513,12 +558,20 @@ void BluezManager::ensureConnected(const QString &path)
 
 void BluezManager::reconnectDevice(const QString &path)
 {
-    if (path.isEmpty() || m_busy || m_discovering)
+    reconnectForGatt(path);
+}
+
+void BluezManager::reconnectForGatt(const QString &path)
+{
+    if (path.isEmpty() || m_busy)
         return;
     if (!pairedWatchPath().isEmpty() && path != pairedWatchPath())
         return;
+    if (m_discovering)
+        stopDiscovery();
+    setDeviceTrusted(path);
     setBusy(true);
-    setStatusMessage(QStringLiteral("Reconnecting…"));
+    setStatusMessage(QStringLiteral("Switching to Bluetooth LE…"));
     QDBusInterface device(QStringLiteral("org.bluez"), path,
                           QStringLiteral("org.bluez.Device1"),
                           QDBusConnection::systemBus());
@@ -527,10 +580,22 @@ void BluezManager::reconnectDevice(const QString &path)
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, watcher, path](QDBusPendingCallWatcher *) {
         watcher->deleteLater();
-        setBusy(false);
-        QTimer::singleShot(800, this, [this, path]() {
-            if (!m_busy && !m_discovering)
-                connectDevice(path);
+        // PreferredBearer only applies while disconnected.
+        setPreferredBearer(path, QStringLiteral("le"));
+        // Brief LE scan so BlueZ has a fresh advertisement before Connect.
+        startLeDiscovery();
+        QTimer::singleShot(2500, this, [this, path]() {
+            if (m_discovering) {
+                QDBusInterface adapter(QStringLiteral("org.bluez"), m_adapterPath,
+                                       QStringLiteral("org.bluez.Adapter1"),
+                                       QDBusConnection::systemBus());
+                adapter.call(QStringLiteral("StopDiscovery"));
+                setDiscovering(false);
+            }
+            clearDiscoveryFilter();
+            m_refreshTimer->start(15000);
+            setBusy(false);
+            connectDevice(path);
         });
     });
 }

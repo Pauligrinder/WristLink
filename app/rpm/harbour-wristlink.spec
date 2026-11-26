@@ -1,6 +1,6 @@
 Name:       harbour-wristlink
 Summary:    Bluetooth watch companion for Sailfish OS
-Version:    0.7.1
+Version:    0.7.2
 Release:    1
 License:    BSD-3-Clause
 Source0:    %{name}-%{version}.tar.bz2
@@ -75,6 +75,9 @@ fi
 %{_libdir}/qt5/qml/org/wristlink
 
 %changelog
+* Thu Nov 26 2026 Pauli Kettunen <pauligrinder@gmail.com> - 0.7.2-1
+- Reconnect dual-mode watches over Bluetooth LE so WristLink GATT is reachable.
+
 * Thu Nov 26 2026 Pauli Kettunen <pauligrinder@gmail.com> - 0.7.1-1
 - Recognize Pixel Watch, OnePlus Watch, and other Wear OS devices as watches.
 

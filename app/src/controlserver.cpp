@@ -24,7 +24,7 @@ WristlinkCore::WristlinkCore(QObject *parent)
     connect(&m_gatt, &GattServer::connectRequested,
             &m_bluez, &BluezManager::ensureConnected);
     connect(&m_gatt, &GattServer::reconnectRequested,
-            &m_bluez, &BluezManager::reconnectDevice);
+            &m_bluez, &BluezManager::reconnectForGatt);
     connect(&m_gatt, &GattServer::syncDue, &m_health, &WatchHealth::sendPhoneBattery);
     connect(&m_health, &WatchHealth::syncRequested, &m_gatt, &GattServer::readMetrics);
     connect(&m_notifications, &NotificationBridge::notificationPosted,
