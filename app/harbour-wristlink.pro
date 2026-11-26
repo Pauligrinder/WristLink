@@ -6,7 +6,7 @@ CONFIG += sailfishapp
 CONFIG += c++11
 QT += dbus
 
-VERSION = 0.7.0
+VERSION = 0.7.1
 DEFINES += APP_VERSION=\\\"$$VERSION\\\"
 
 SOURCES += \

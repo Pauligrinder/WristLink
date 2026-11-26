@@ -18,11 +18,108 @@ Q_DECLARE_METATYPE(InterfaceMap)
 Q_DECLARE_METATYPE(ManagedObjectMap)
 
 static const char *kAgentPath = "/org/sailfishos/WristLink/agent";
+// Same UUID the Wear OS app advertises (GattServer::kServiceUuid).
+static const char *kWristLinkServiceUuid = "f1a5e001-7c4b-4d2a-9e11-57a1f15c0001";
 
 static bool isPermissionError(const QString &name)
 {
     return name == QLatin1String("org.freedesktop.DBus.Error.AuthFailed")
             || name == QLatin1String("org.freedesktop.DBus.Error.AccessDenied");
+}
+
+// "watch" / "smartwatch" as a whole word (not "Swatch"), optional trailing digits.
+static bool nameHasWatchWord(const QString &name)
+{
+    const QString lower = name.toLower();
+    int from = 0;
+    while (from < lower.size()) {
+        const int idx = lower.indexOf(QLatin1String("watch"), from);
+        if (idx < 0)
+            return false;
+        const bool smartPrefix = idx >= 5
+                && lower.mid(idx - 5, 5) == QLatin1String("smart");
+        const int start = smartPrefix ? idx - 5 : idx;
+        const bool boundaryBefore = start == 0
+                || !lower.at(start - 1).isLetterOrNumber();
+        int end = idx + 5;
+        while (end < lower.size() && lower.at(end).isDigit())
+            ++end;
+        const bool boundaryAfter = end >= lower.size()
+                || !lower.at(end).isLetterOrNumber();
+        if (boundaryBefore && boundaryAfter)
+            return true;
+        from = idx + 1;
+    }
+    return false;
+}
+
+static bool deviceAdvertisesWristLink(const QVariantMap &properties)
+{
+    const QVariant uuidsVar = properties.value(QStringLiteral("UUIDs"));
+    QStringList uuids;
+    if (uuidsVar.canConvert<QStringList>()) {
+        uuids = uuidsVar.toStringList();
+    } else if (uuidsVar.canConvert<QVariantList>()) {
+        foreach (const QVariant &entry, uuidsVar.toList())
+            uuids.append(entry.toString());
+    }
+    foreach (const QString &uuid, uuids) {
+        if (uuid.compare(QLatin1String(kWristLinkServiceUuid), Qt::CaseInsensitive) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool isWearableDevice(const QVariantMap &properties, const QString &name)
+{
+    if (properties.value(QStringLiteral("Icon")).toString()
+            .compare(QStringLiteral("watch"), Qt::CaseInsensitive) == 0)
+        return true;
+
+    // Bluetooth GAP Appearance: 0x00C0–0x00CF = watch subcategory.
+    if (properties.contains(QStringLiteral("Appearance"))) {
+        const uint appearance = properties.value(QStringLiteral("Appearance")).toUInt();
+        if (appearance >= 0x00C0 && appearance <= 0x00CF)
+            return true;
+    }
+
+    // Class of Device: Major = Wearable (7), Minor = Wrist Watch (1) or unclassified (0).
+    if (properties.contains(QStringLiteral("Class"))) {
+        const uint cod = properties.value(QStringLiteral("Class")).toUInt();
+        const uint major = (cod >> 8) & 0x1F;
+        const uint minor = (cod >> 2) & 0x3F;
+        if (major == 7 && (minor == 0 || minor == 1))
+            return true;
+    }
+
+    if (deviceAdvertisesWristLink(properties))
+        return true;
+
+    if (nameHasWatchWord(name))
+        return true;
+
+    // Samsung model codes that omit "Watch" (Galaxy Watch 4–7 era).
+    static const char *const modelHints[] = {
+        "SM-L3", "SM-L7", "SM-R8", "SM-R9", "SM-R5", "SM-R4",
+        0
+    };
+    for (int i = 0; modelHints[i]; ++i) {
+        if (name.contains(QLatin1String(modelHints[i]), Qt::CaseInsensitive))
+            return true;
+    }
+
+    // Wear OS brands whose default names may not include the word "Watch".
+    static const char *const brandHints[] = {
+        "TicWatch", "Mobvoi", "Skagen Falster", "Emporio Armani",
+        "TAG Heuer", "Wear OS", "WearOS",
+        0
+    };
+    for (int i = 0; brandHints[i]; ++i) {
+        if (name.contains(QLatin1String(brandHints[i]), Qt::CaseInsensitive))
+            return true;
+    }
+
+    return false;
 }
 
 static bool isInProgressError(const QDBusError &error)
@@ -311,10 +408,7 @@ void BluezManager::refresh()
         device.insert(QStringLiteral("connected"), properties.value(QStringLiteral("Connected"), false));
         device.insert(QStringLiteral("rssi"), properties.value(QStringLiteral("RSSI"), -100));
         device.insert(QStringLiteral("wearable"),
-                      name.contains(QStringLiteral("Galaxy Watch"), Qt::CaseInsensitive)
-                      || name.contains(QStringLiteral("Watch7"), Qt::CaseInsensitive)
-                      || name.contains(QStringLiteral("SM-L3"), Qt::CaseInsensitive)
-                      || name.contains(QStringLiteral("SM-L7"), Qt::CaseInsensitive));
+                      isWearableDevice(properties, name));
         found.append(device);
     }
 

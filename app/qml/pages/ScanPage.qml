@@ -89,7 +89,7 @@ Page {
                     width: parent.width
                     text: modelData.connected ? qsTr("Connected")
                                               : (modelData.paired ? qsTr("Paired — tap to connect")
-                                                                  : (modelData.wearable ? qsTr("Galaxy Watch — tap to pair")
+                                                                  : (modelData.wearable ? qsTr("Wear OS watch — tap to pair")
                                                                                         : modelData.address))
                     truncationMode: TruncationMode.Fade
                     color: modelData.wearable ? Theme.secondaryHighlightColor

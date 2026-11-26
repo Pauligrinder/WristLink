@@ -35,7 +35,7 @@ Page {
             Label {
                 width: parent.width - 2 * Theme.horizontalPageMargin
                 x: Theme.horizontalPageMargin
-                text: qsTr("Bluetooth pairing uses the standard BlueZ service. If WristLink cannot register its own pairing agent, confirm the code in the Sailfish Bluetooth dialog. Galaxy Watch setup, Samsung account sign-in, and Samsung Health sync are not provided by this app.")
+                text: qsTr("Bluetooth pairing uses the standard BlueZ service. If WristLink cannot register its own pairing agent, confirm the code in the Sailfish Bluetooth dialog. Vendor watch apps, accounts, and health sync (Samsung, Google, OnePlus, and others) are not provided by this app.")
                 wrapMode: Text.Wrap
                 color: Theme.secondaryColor
             }

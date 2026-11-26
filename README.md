@@ -13,9 +13,11 @@ what the phone sends. The watch does not scan. Sailfish connects to the paired
 watch and keeps that connection. The watch only advertises while that
 connection is down, so the phone can reach it again.
 
-WristLink has been tested on **Galaxy Watch 7**. It should work on other Wear OS
-watches that can sideload the APK and expose Health Services / step sensors, but
-those have not been tested yet.
+WristLink has been tested on **Galaxy Watch 7**. Detection also recognizes other
+Wear OS watches (Pixel Watch, OnePlus Watch, TicWatch, Fossil, and similar) via
+Bluetooth name, BlueZ watch icon/appearance/class, or the WristLink GATT
+service. Those models should work if they can sideload the APK and expose Health
+Services / step sensors, but they have not been tested yet.
 
 ## Jolla app
 

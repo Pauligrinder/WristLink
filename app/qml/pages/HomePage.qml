@@ -39,7 +39,7 @@ Page {
 
             PageHeader {
                 title: qsTr("WristLink")
-                description: wristlink.connected ? qsTr("Galaxy Watch companion")
+                description: wristlink.connected ? qsTr("Wear OS companion")
                                                  : wristlink.status
             }
 
